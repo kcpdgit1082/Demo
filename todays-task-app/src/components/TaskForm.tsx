@@ -48,8 +48,11 @@ export function TaskForm({ onSuccess }: TaskFormProps) {
     setError('');
 
     try {
+      // Store email for type safety
+      const userEmail = user.email;
+      
       // Encrypt the description
-      const encryptedDescription = encryptData(description, user.email);
+      const encryptedDescription = encryptData(description, userEmail);
 
       // Create the task
       const { data: taskData, error: taskError } = await supabase
@@ -72,7 +75,7 @@ export function TaskForm({ onSuccess }: TaskFormProps) {
       if (validItems.length > 0) {
         const checklistData = validItems.map((item, index) => ({
           task_id: taskData.id,
-          encrypted_data: encryptData(item, user.email),
+          encrypted_data: encryptData(item, userEmail),
           position: index,
           completed: false,
         }));
