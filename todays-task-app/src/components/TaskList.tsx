@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
 import type { Task, ChecklistItem, DecryptedTask } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
@@ -41,38 +41,25 @@ export function TaskList() {
 
       if (error) throw error;
 
-      // Decrypt tasks
-      const decryptedTasks: DecryptedTask[] = await Promise.all(
-        (data || []).map(async (task: Task & { checklist_items: ChecklistItem[] }) => {
+      // Decrypt tasks synchronously — decryptData is not async, no need for Promise.all
+      const decryptedTasks: DecryptedTask[] = (data || []).map(
+        (task: Task & { checklist_items: ChecklistItem[] }) => {
           try {
             const description = decryptData(task.encrypted_data, user.email!);
-            
-            const checklist = await Promise.all(
-              (task.checklist_items || [])
-                .sort((a, b) => a.position - b.position)
-                .map(async (item) => {
-                  const text = decryptData(item.encrypted_data, user.email!);
-                  return {
-                    ...item,
-                    text,
-                  };
-                })
-            );
 
-            return {
-              ...task,
-              description,
-              checklist,
-            };
+            const checklist = (task.checklist_items || [])
+              .sort((a, b) => a.position - b.position)
+              .map((item) => {
+                const text = decryptData(item.encrypted_data, user.email!);
+                return { ...item, text };
+              });
+
+            return { ...task, description, checklist };
           } catch (err) {
             console.error('Error decrypting task:', err);
-            return {
-              ...task,
-              description: '[Decryption failed]',
-              checklist: [],
-            };
+            return { ...task, description: '[Decryption failed]', checklist: [] };
           }
-        })
+        }
       );
 
       setTasks(decryptedTasks);
@@ -83,7 +70,39 @@ export function TaskList() {
     }
   };
 
-  const handleTaskUpdate = () => {
+  // Optimistic local update for task status toggle (no full re-fetch)
+  const handleTaskStatusChange = useCallback(
+    (taskId: string, newStatus: 'pending' | 'completed', completedAt: string | null) => {
+      setTasks((prev) =>
+        prev.map((t) =>
+          t.id === taskId ? { ...t, status: newStatus, completed_at: completedAt } : t
+        )
+      );
+    },
+    []
+  );
+
+  // Optimistic local update for checklist item toggle (no full re-fetch)
+  const handleChecklistItemChange = useCallback(
+    (taskId: string, itemId: string, completed: boolean) => {
+      setTasks((prev) =>
+        prev.map((t) =>
+          t.id === taskId
+            ? {
+                ...t,
+                checklist: t.checklist.map((ci) =>
+                  ci.id === itemId ? { ...ci, completed } : ci
+                ),
+              }
+            : t
+        )
+      );
+    },
+    []
+  );
+
+  // Full re-fetch only when tasks are created or deleted
+  const handleTaskMutated = () => {
     fetchTasks();
   };
 
@@ -161,7 +180,7 @@ export function TaskList() {
         {/* Task Form */}
         {showForm && (
           <div className="mb-6">
-            <TaskForm onSuccess={() => { setShowForm(false); handleTaskUpdate(); }} />
+            <TaskForm onSuccess={() => { setShowForm(false); handleTaskMutated(); }} />
           </div>
         )}
 
@@ -179,7 +198,13 @@ export function TaskList() {
         ) : (
           <div className="space-y-4">
             {tasks.map((task) => (
-              <TaskItem key={task.id} task={task} onUpdate={handleTaskUpdate} />
+              <TaskItem
+                key={task.id}
+                task={task}
+                onTaskStatusChange={handleTaskStatusChange}
+                onChecklistItemChange={handleChecklistItemChange}
+                onDeleted={handleTaskMutated}
+              />
             ))}
           </div>
         )}

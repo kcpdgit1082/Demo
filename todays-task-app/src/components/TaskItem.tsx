@@ -5,50 +5,58 @@ import { useAuth } from '../contexts/AuthContext';
 
 interface TaskItemProps {
   task: DecryptedTask;
-  onUpdate: () => void;
+  onTaskStatusChange: (taskId: string, newStatus: 'pending' | 'completed', completedAt: string | null) => void;
+  onChecklistItemChange: (taskId: string, itemId: string, completed: boolean) => void;
+  onDeleted: () => void;
 }
 
-export function TaskItem({ task, onUpdate }: TaskItemProps) {
+export function TaskItem({ task, onTaskStatusChange, onChecklistItemChange, onDeleted }: TaskItemProps) {
   const [expanded, setExpanded] = useState(false);
   const [loading, setLoading] = useState(false);
   const { user } = useAuth();
 
   const toggleTaskStatus = async () => {
     if (!user?.email) return;
-    setLoading(true);
+
+    const newStatus = task.status === 'pending' ? 'completed' : 'pending';
+    const completedAt = newStatus === 'completed' ? new Date().toISOString() : null;
+
+    // Optimistic update — reflect immediately in the UI
+    onTaskStatusChange(task.id, newStatus, completedAt);
 
     try {
-      const newStatus = task.status === 'pending' ? 'completed' : 'pending';
       const { error } = await supabase
         .from('tasks')
-        .update({
-          status: newStatus,
-          completed_at: newStatus === 'completed' ? new Date().toISOString() : null,
-        })
+        .update({ status: newStatus, completed_at: completedAt })
         .eq('id', task.id);
 
       if (error) throw error;
-      onUpdate();
     } catch (error) {
       console.error('Error updating task:', error);
-    } finally {
-      setLoading(false);
+      // Revert on failure
+      onTaskStatusChange(task.id, task.status, task.completed_at);
     }
   };
 
   const toggleChecklistItem = async (itemId: string, currentCompleted: boolean) => {
     if (!user?.email) return;
 
+    const newCompleted = !currentCompleted;
+
+    // Optimistic update — reflect immediately in the UI
+    onChecklistItemChange(task.id, itemId, newCompleted);
+
     try {
       const { error } = await supabase
         .from('checklist_items')
-        .update({ completed: !currentCompleted })
+        .update({ completed: newCompleted })
         .eq('id', itemId);
 
       if (error) throw error;
-      onUpdate();
     } catch (error) {
       console.error('Error updating checklist item:', error);
+      // Revert on failure
+      onChecklistItemChange(task.id, itemId, currentCompleted);
     }
   };
 
@@ -63,7 +71,7 @@ export function TaskItem({ task, onUpdate }: TaskItemProps) {
         .eq('id', task.id);
 
       if (error) throw error;
-      onUpdate();
+      onDeleted();
     } catch (error) {
       console.error('Error deleting task:', error);
     } finally {
