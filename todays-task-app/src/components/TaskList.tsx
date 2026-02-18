@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
-import { supabase, Task, ChecklistItem, DecryptedTask } from '../lib/supabase';
+import { supabase } from '../lib/supabase';
+import type { Task, ChecklistItem, DecryptedTask } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
-import { decryptData, decryptObject } from '../lib/encryption';
+import { decryptData } from '../lib/encryption';
 import { TaskItem } from './TaskItem';
 import { TaskForm } from './TaskForm';
 

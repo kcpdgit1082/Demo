@@ -1,7 +1,7 @@
 import { useState } from 'react';
-import { supabase, DecryptedTask } from '../lib/supabase';
+import { supabase } from '../lib/supabase';
+import type { DecryptedTask } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
-import { encryptData } from '../lib/encryption';
 
 interface TaskItemProps {
   task: DecryptedTask;
